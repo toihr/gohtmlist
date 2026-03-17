@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>CSV Table</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+        <style>
+            body {
+                font-family: "Inter", sans-serif;
+                font-size: 14px;
+                color: #111;
+                background: #fff;
+                max-width: 860px;
+                margin: 60px auto;
+                padding: 0 24px;
+            }
+            h1 {
+                font-size: 18px;
+                font-weight: 500;
+                margin-bottom: 4px;
+            }
+            p.sub {
+                color: #888;
+                font-size: 12px;
+                margin-bottom: 24px;
+            }
+            input {
+                width: 100%;
+                padding: 8px 10px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                font-size: 14px;
+                font-family: inherit;
+                outline: none;
+                margin-bottom: 6px;
+                box-sizing: border-box;
+            }
+            input:focus {
+                border-color: #999;
+            }
+            .meta {
+                font-size: 12px;
+                color: #888;
+                margin-bottom: 12px;
+            }
+            .meta span {
+                color: #111;
+                font-weight: 500;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+            }
+            th {
+                text-align: left;
+                font-size: 11px;
+                font-weight: 500;
+                color: #888;
+                text-transform: uppercase;
+                letter-spacing: 0.06em;
+                padding: 8px 12px;
+                border-bottom: 1px solid #e5e5e5;
+                cursor: pointer;
+                user-select: none;
+            }
+            th:hover {
+                color: #111;
+            }
+            th .s {
+                margin-left: 4px;
+                opacity: 0.3;
+            }
+            th.asc .s::after {
+                content: "↑";
+                opacity: 1;
+                color: #111;
+            }
+            th.desc .s::after {
+                content: "↓";
+                opacity: 1;
+                color: #111;
+            }
+            th:not(.asc):not(.desc) .s::after {
+                content: "↕";
+            }
+            td {
+                padding: 9px 12px;
+                border-bottom: 1px solid #f0f0f0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            tr:hover td {
+                background: #fafafa;
+            }
+            .vp {
+                height: 460px;
+                overflow-y: auto;
+                position: relative;
+            }
+            .vp-inner {
+                position: relative;
+                width: 100%;
+            }
+            .vp-rows {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+            }
+            .empty {
+                text-align: center;
+                padding: 40px;
+                color: #aaa;
+                font-size: 13px;
+            }
+            mark {
+                background: #ffe066;
+                color: inherit;
+                border-radius: 2px;
+                padding: 0 1px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Data Table</h1>
+        <p class="sub">Filterable · Sortable · Virtual Rendering</p>
+
+        <input type="search" id="filter" placeholder="Filter…" autocomplete="off" />
+        <p class="meta"><span id="count">0</span> rows</p>
+
+        <table id="thead-table">
+            <colgroup id="cg-head"></colgroup>
+            <thead id="thead"></thead>
+        </table>
+
+        <div class="vp" id="vp">
+            <div class="vp-inner" id="vp-inner">
+                <div class="vp-rows" id="vp-rows"></div>
+            </div>
+        </div>
+        
+        
+        <script type="text/csv" id="csv-data">
+        name,age,city,salary
+        Alice,30,New York,85000
+        Bob,25,Los Angeles,72000
+        Carol,35,Chicago,91000
+        David,28,Houston,67000
+        Eve,42,Phoenix,104000
+        Frank,31,Philadelphia,78000
+        Grace,27,San Antonio,65000
+        Henry,38,San Diego,88000
+        Iris,33,Dallas,82000
+        Jack,45,San Jose,112000
+        Karen,29,Austin,71000
+        Leo,36,Jacksonville,79000
+        Mia,24,Fort Worth,61000
+        Noah,41,Columbus,95000
+        Olivia,32,Charlotte,83000
+        Paul,37,Indianapolis,87000
+        Quinn,26,San Francisco,118000
+        Rachel,43,Seattle,108000
+        Sam,34,Denver,89000
+        Tina,28,Nashville,69000
+        Uma,39,Oklahoma City,76000
+        Victor,31,El Paso,63000
+        Wendy,46,Boston,102000
+        Xander,27,Portland,74000
+        Yara,35,Las Vegas,81000
+        Zane,30,Memphis,66000
+        Amy,44,Louisville,93000
+        Brian,33,Baltimore,85000
+        Cleo,29,Milwaukee,70000
+        Derek,40,Albuquerque,77000
+        
+        </script>
+
+        <script>
+            const raw = document.getElementById("csv-data").textContent.trim();
+            const lines = raw
+                .split("\n")
+                .map((l) => l.trim())
+                .filter(Boolean);
+            const headers = lines[0].split(",");
+            const allRows = lines.slice(1).map((l) => l.split(","));
+
+            const ROW_H = 39;
+            const OVERSCAN = 5;
+            let sortCol = -1;
+            let sortAsc = true;
+            let query = "";
+            let filteredRows = [...allRows];
+
+            
+            const pct = `${100 / headers.length}%`;
+            [document.getElementById("cg-head")].forEach((cg) => {
+                headers.forEach(() => {
+                    const c = document.createElement("col");
+                    c.style.width = pct;
+                    cg.appendChild(c);
+                });
+            });
+
+            
+            const tr = document.createElement("tr");
+            headers.forEach((h, i) => {
+                const th = document.createElement("th");
+                th.innerHTML = `${h}<span class="s"></span>`;
+                th.onclick = () => {
+                    sortCol === i ? (sortAsc = !sortAsc) : ((sortCol = i), (sortAsc = true));
+                    document.querySelectorAll("th").forEach((el, j) => {
+                        el.classList.toggle("asc", j === i && sortAsc);
+                        el.classList.toggle("desc", j === i && !sortAsc);
+                    });
+                    applyFilterSort();
+                };
+                tr.appendChild(th);
+            });
+            document.getElementById("thead").appendChild(tr);
+
+            function applyFilterSort() {
+                const q = query.toLowerCase();
+                filteredRows = q ? allRows.filter((r) => r.some((c) => c.toLowerCase().includes(q))) : [...allRows];
+                if (sortCol >= 0) {
+                    filteredRows.sort((a, b) => {
+                        const va = a[sortCol] ?? "",
+                            vb = b[sortCol] ?? "";
+                        const na = parseFloat(va),
+                            nb = parseFloat(vb);
+                        const cmp = !isNaN(na) && !isNaN(nb) ? na - nb : va.localeCompare(vb);
+                        return sortAsc ? cmp : -cmp;
+                    });
+                }
+                document.getElementById("count").textContent = filteredRows.length;
+                document.getElementById("vp-inner").style.height = filteredRows.length * ROW_H + "px";
+                renderVisible();
+            }
+
+            function hl(text, q) {
+                if (!q) return text;
+                return text.replace(
+                    new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi"),
+                    "<mark>$1</mark>",
+                );
+            }
+
+            function renderVisible() {
+                const vp = document.getElementById("vp");
+                const container = document.getElementById("vp-rows");
+                const total = filteredRows.length;
+                if (!total) {
+                    container.style.top = "0";
+                    container.innerHTML = '<div class="empty">No results</div>';
+                    return;
+                }
+
+                const start = Math.max(0, Math.floor(vp.scrollTop / ROW_H) - OVERSCAN);
+                const end = Math.min(total - 1, Math.ceil((vp.scrollTop + vp.clientHeight) / ROW_H) + OVERSCAN);
+                container.style.top = start * ROW_H + "px";
+
+                const tbl = document.createElement("table");
+                tbl.style.cssText = "width:100%;border-collapse:collapse;table-layout:fixed";
+                const cg = document.createElement("colgroup");
+                headers.forEach(() => {
+                    const c = document.createElement("col");
+                    c.style.width = pct;
+                    cg.appendChild(c);
+                });
+                tbl.appendChild(cg);
+
+                const tbody = document.createElement("tbody");
+                for (let i = start; i <= end; i++) {
+                    const row = filteredRows[i];
+                    const tr = document.createElement("tr");
+                    row.forEach((cell) => {
+                        const td = document.createElement("td");
+                        td.innerHTML = hl(cell, query);
+                        tr.appendChild(td);
+                    });
+                    tbody.appendChild(tr);
+                }
+                tbl.appendChild(tbody);
+                container.innerHTML = "";
+                container.appendChild(tbl);
+            }
+
+            document.getElementById("vp").addEventListener("scroll", renderVisible, { passive: true });
+
+            let t;
+            document.getElementById("filter").addEventListener("input", (e) => {
+                clearTimeout(t);
+                t = setTimeout(() => {
+                    query = e.target.value;
+                    document.getElementById("vp").scrollTop = 0;
+                    applyFilterSort();
+                }, 120);
+            });
+
+            applyFilterSort();
+        </script>
+    </body>
+</html>
