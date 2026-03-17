@@ -1,0 +1,6 @@
+# Compiled binaries
+gohtmlist
+
+# Build output
+*.exe
+*.out
