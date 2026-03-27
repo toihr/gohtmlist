@@ -113,6 +113,12 @@ func TestRender_OutputIsValidHTML(t *testing.T) {
 	}
 }
 
+func TestRunTests_AllPass(t *testing.T) {
+	if !runTests() {
+		t.Error("runTests() returned false; expected all built-in tests to pass")
+	}
+}
+
 func TestRender_OutputContainsCSVScriptTag(t *testing.T) {
 	dir := t.TempDir()
 	csvPath := filepath.Join(dir, "input.csv")
